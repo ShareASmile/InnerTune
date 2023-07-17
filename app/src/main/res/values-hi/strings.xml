@@ -140,7 +140,7 @@
     <string name="sleep_timer">स्लीप टाइमर</string>
     <string name="end_of_song">गीत का अंत</string>
     <plurals name="minute">
-        <item quantity="one">एक मिनट</item>
+        <item quantity="one">%d एक मिनट</item>
         <item quantity="other">%d मिनट्स</item>
     </plurals>
     <string name="error_no_stream">कोई स्ट्रीम उपलब्ध नहीं है</string>
