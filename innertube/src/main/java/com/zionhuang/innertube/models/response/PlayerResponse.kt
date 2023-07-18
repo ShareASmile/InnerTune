@@ -41,7 +41,7 @@ data class PlayerResponse(
         @Serializable
         data class Format(
             val itag: Int,
-            val url: String,
+            val url: String?,
             val mimeType: String,
             val bitrate: Int,
             val width: Int?,
