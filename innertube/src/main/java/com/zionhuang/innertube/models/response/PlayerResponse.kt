@@ -13,7 +13,7 @@ data class PlayerResponse(
     val playabilityStatus: PlayabilityStatus,
     val playerConfig: PlayerConfig?,
     val streamingData: StreamingData?,
-    val videoDetails: VideoDetails,
+    val videoDetails: VideoDetails?,
 ) {
     @Serializable
     data class PlayabilityStatus(
