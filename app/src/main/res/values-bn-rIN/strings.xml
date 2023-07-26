@@ -156,7 +156,7 @@
 
     <!-- Snackbar -->
     <string name="playlist_imported">আমদানি করা প্লেলিস্ট</string>
-    <string name="removed_song_from_playlist">প্লেলিস্ট থেকে সরানো হয়েছে</string>
+    <string name="removed_song_from_playlist">প্লেলিস্ট থেকে \"%s\" সরানো হয়েছে</string>
     <string name="playlist_synced">সিঙ্ক্রোনাইজ করা প্লেলিস্ট</string>
     <string name="undo">বাতিল করুন</string>
 
