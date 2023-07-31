@@ -6,6 +6,16 @@ sealed class YTItem {
     abstract val thumbnail: String
     abstract val explicit: Boolean
     abstract val shareLink: String
+
+    fun getThumbnailUrl(): String {
+        return thumbnail.split("=w").let {
+            if (it.size > 1) {
+                it[0] + "=w720-h720"
+            } else {
+                thumbnail
+            }
+        }
+    }
 }
 
 data class Artist(
@@ -27,6 +37,7 @@ data class SongItem(
     override val thumbnail: String,
     override val explicit: Boolean = false,
     val endpoint: WatchEndpoint? = null,
+    val isrc: String? = null,
 ) : YTItem() {
     override val shareLink: String
         get() = "https://music.youtube.com/watch?v=$id"

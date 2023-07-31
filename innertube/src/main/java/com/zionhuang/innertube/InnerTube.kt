@@ -1,6 +1,5 @@
 package com.zionhuang.innertube
 
-import com.zionhuang.innertube.encoder.brotli
 import com.zionhuang.innertube.models.Context
 import com.zionhuang.innertube.models.YouTubeClient
 import com.zionhuang.innertube.models.YouTubeLocale
@@ -8,12 +7,11 @@ import com.zionhuang.innertube.models.body.*
 import com.zionhuang.innertube.utils.parseCookieString
 import com.zionhuang.innertube.utils.sha1
 import io.ktor.client.*
-import io.ktor.client.engine.okhttp.*
 import io.ktor.client.plugins.*
-import io.ktor.client.plugins.compression.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.http.*
+import io.ktor.http.HttpHeaders.ContentEncoding
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.util.encodeBase64
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -48,7 +46,7 @@ class InnerTube {
         }
 
     @OptIn(ExperimentalSerializationApi::class)
-    private fun createClient() = HttpClient(OkHttp) {
+    private fun createClient() = HttpClient {
         expectSuccess = true
 
         install(ContentNegotiation) {
@@ -57,12 +55,6 @@ class InnerTube {
                 explicitNulls = false
                 encodeDefaults = true
             })
-        }
-
-        install(ContentEncoding) {
-            brotli(1.0F)
-            gzip(0.9F)
-            deflate(0.8F)
         }
 
         if (proxy != null) {
