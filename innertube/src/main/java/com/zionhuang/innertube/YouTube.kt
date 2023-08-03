@@ -48,20 +48,27 @@ import com.zionhuang.innertube.pages.SearchResult
 import com.zionhuang.innertube.pages.SearchSuggestionPage
 import com.zionhuang.innertube.pages.SearchSummary
 import com.zionhuang.innertube.pages.SearchSummaryPage
+import `in`.shabinder.soundbound.utils.DevicePreferences
+import `in`.shabinder.soundbound.utils.limitDecimals
+import `in`.shabinder.soundbound.zipline.LocaleProvider
 import io.ktor.client.call.body
 import io.ktor.client.statement.bodyAsText
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
-import java.net.Proxy
+import kotlin.jvm.JvmInline
 
 /**
  * Parse useful data with [InnerTube] sending requests.
  * Modified from [ViMusic](https://github.com/vfsfitvnm/ViMusic)
  */
 object YouTube {
-    private val innerTube = InnerTube()
+    lateinit var localeProvider: LocaleProvider
+    lateinit var devicePreferences: DevicePreferences
+    private val innerTube by lazy {
+        InnerTube(localeProvider, devicePreferences)
+    }
 
     var locale: YouTubeLocale
         get() = innerTube.locale
@@ -77,11 +84,6 @@ object YouTube {
         get() = innerTube.cookie
         set(value) {
             innerTube.cookie = value
-        }
-    var proxy: Proxy?
-        get() = innerTube.proxy
-        set(value) {
-            innerTube.proxy = value
         }
 
     suspend fun searchSuggestions(query: String): Result<SearchSuggestions> = runCatching {
@@ -463,7 +465,7 @@ object YouTube {
 
     suspend fun queue(videoIds: List<String>? = null, playlistId: String? = null): Result<List<SongItem>> = runCatching {
         if (videoIds != null) {
-            assert(videoIds.size <= MAX_GET_QUEUE_SIZE) // Max video limit
+            error(videoIds.size <= MAX_GET_QUEUE_SIZE) // Max video limit
         }
         innerTube.getQueue(WEB_REMIX, videoIds, playlistId).body<GetQueueResponse>().queueDatas
             .mapNotNull {
@@ -480,11 +482,15 @@ object YouTube {
             val text = group.transcriptCueGroupRenderer.cues[0].transcriptCueRenderer.cue.simpleText
                 .trim('♪')
                 .trim(' ')
-            "[%02d:%02d.%03d]$text".format(time / 60000, (time / 1000) % 60, time % 1000)
+//            "[%02d:%02d.%03d]$text".format(time / 60000, (time / 1000) % 60, time % 1000)
+            val hr = (time / 60000).limitDecimals(2)
+            val min = ((time / 1000) % 60).limitDecimals(2)
+            val sec = (time % 1000).limitDecimals(3)
+            "[$hr:$min.$sec]$text"
         }!!
     }
 
-    suspend fun visitorData(): Result<String> = runCatching {
+    suspend fun getVisitorData(): Result<String> = runCatching {
         Json.parseToJsonElement(innerTube.getSwJsData().bodyAsText().substring(5))
             .jsonArray[0]
             .jsonArray[2]

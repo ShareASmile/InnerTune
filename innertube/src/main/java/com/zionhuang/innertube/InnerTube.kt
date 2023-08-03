@@ -6,30 +6,27 @@ import com.zionhuang.innertube.models.YouTubeLocale
 import com.zionhuang.innertube.models.body.*
 import com.zionhuang.innertube.utils.parseCookieString
 import com.zionhuang.innertube.utils.sha1
-import io.ktor.client.*
-import io.ktor.client.plugins.*
-import io.ktor.client.plugins.contentnegotiation.*
-import io.ktor.client.request.*
-import io.ktor.http.*
-import io.ktor.http.HttpHeaders.ContentEncoding
-import io.ktor.serialization.kotlinx.json.*
-import io.ktor.util.encodeBase64
+import `in`.shabinder.soundbound.utils.DevicePreferences
+import `in`.shabinder.soundbound.zipline.LocaleProvider
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
-import java.net.Proxy
 import java.util.*
 
 /**
  * Provide access to InnerTube endpoints.
  * For making HTTP requests, not parsing response.
  */
-class InnerTube {
+class InnerTube(
+    private val localeProvider: LocaleProvider,
+    private val devicePreferences: DevicePreferences
+) {
     private var httpClient = createClient()
 
     var locale = YouTubeLocale(
-        gl = Locale.getDefault().country,
-        hl = Locale.getDefault().toLanguageTag()
+        gl = localeProvider.getDefaultLocaleCountry(),
+        hl = localeProvider.getDefaultLocaleCountry()
     )
+
     var visitorData: String = "CgtsZG1ySnZiQWtSbyiMjuGSBg%3D%3D"
     var cookie: String? = null
         set(value) {
@@ -37,13 +34,6 @@ class InnerTube {
             cookieMap = if (value == null) emptyMap() else parseCookieString(value)
         }
     private var cookieMap = emptyMap<String, String>()
-
-    var proxy: Proxy? = null
-        set(value) {
-            field = value
-            httpClient.close()
-            httpClient = createClient()
-        }
 
     @OptIn(ExperimentalSerializationApi::class)
     private fun createClient() = HttpClient {
@@ -55,12 +45,6 @@ class InnerTube {
                 explicitNulls = false
                 encodeDefaults = true
             })
-        }
-
-        if (proxy != null) {
-            engine {
-                proxy = this@InnerTube.proxy
-            }
         }
 
         defaultRequest {
@@ -82,7 +66,7 @@ class InnerTube {
                 cookie?.let { cookie ->
                     append("cookie", cookie)
                     if ("SAPISID" !in cookieMap) return@let
-                    val currentTime = System.currentTimeMillis() / 1000
+                    val currentTime = devicePreferences.getSystemTimeMillis() / 1000
                     val sapisidHash = sha1("$currentTime ${cookieMap["SAPISID"]} https://music.youtube.com")
                     append("Authorization", "SAPISIDHASH ${currentTime}_${sapisidHash}")
                 }
