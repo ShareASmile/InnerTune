@@ -102,6 +102,7 @@ class InnerTube(
         query: String? = null,
         params: String? = null,
         continuation: String? = null,
+        isIsrcSearch: Boolean = false, //isrc searches come up in de `hl` locale
     ): SearchResponse = ytClientCall(
         url = "search",
         params = mutableMapOf(
@@ -116,7 +117,9 @@ class InnerTube(
         body = HttpClient.BodyType.JSON(
             Json.encodeToString(
                 SearchBody(
-                    context = client.toContext(locale, visitorData),
+                    context = client.toContext(locale.run {
+                        if (isIsrcSearch) copy(hl = "de") else this
+                    }, visitorData),
                     query = query,
                     params = params
                 )
