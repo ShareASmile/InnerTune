@@ -39,7 +39,7 @@ class InnerTube(
 
     var locale = YouTubeLocale(
         gl = localeProvider.getDefaultLocaleCountry(),
-        hl = localeProvider.getDefaultLocaleCountry()
+        hl = localeProvider.getDefaultLocaleLanguageTag()
     )
 
     var visitorData: String = "CgtsZG1ySnZiQWtSbyiMjuGSBg%3D%3D"
@@ -63,6 +63,7 @@ class InnerTube(
         setLogin: Boolean = false
     ): T = httpClient.post(
         url,
+        body = body,
         params = mutableMapOf(
             "key" to client.api_key,
             "prettyPrint" to "false"
