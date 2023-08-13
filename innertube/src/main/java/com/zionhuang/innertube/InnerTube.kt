@@ -4,11 +4,27 @@ import com.zionhuang.innertube.models.Context
 import com.zionhuang.innertube.models.YouTubeClient
 import com.zionhuang.innertube.models.YouTubeLocale
 import com.zionhuang.innertube.models.body.*
+import com.zionhuang.innertube.models.response.AccountMenuResponse
+import com.zionhuang.innertube.models.response.BrowseResponse
+import com.zionhuang.innertube.models.response.GetQueueResponse
+import com.zionhuang.innertube.models.response.GetSearchSuggestionsResponse
+import com.zionhuang.innertube.models.response.GetTranscriptResponse
+import com.zionhuang.innertube.models.response.NextResponse
+import com.zionhuang.innertube.models.response.PipedResponse
+import com.zionhuang.innertube.models.response.PlayerResponse
+import com.zionhuang.innertube.models.response.SearchResponse
 import com.zionhuang.innertube.utils.parseCookieString
 import com.zionhuang.innertube.utils.sha1
+import `in`.shabinder.soundbound.providers.Dependencies
 import `in`.shabinder.soundbound.utils.DevicePreferences
+import `in`.shabinder.soundbound.utils.GlobalJson
+import `in`.shabinder.soundbound.zipline.HttpClient
 import `in`.shabinder.soundbound.zipline.LocaleProvider
+import `in`.shabinder.soundbound.zipline.build
+import `in`.shabinder.soundbound.zipline.get
+import `in`.shabinder.soundbound.zipline.post
 import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.util.*
 
@@ -17,9 +33,8 @@ import java.util.*
  * For making HTTP requests, not parsing response.
  */
 class InnerTube(
-    private val localeProvider: LocaleProvider,
-    private val devicePreferences: DevicePreferences
-) {
+    dependencies: Dependencies
+) : Dependencies by dependencies {
     private var httpClient = createClient()
 
     var locale = YouTubeLocale(
@@ -35,93 +50,112 @@ class InnerTube(
         }
     private var cookieMap = emptyMap<String, String>()
 
-    @OptIn(ExperimentalSerializationApi::class)
-    private fun createClient() = HttpClient {
-        expectSuccess = true
-
-        install(ContentNegotiation) {
-            json(Json {
-                ignoreUnknownKeys = true
-                explicitNulls = false
-                encodeDefaults = true
-            })
-        }
-
-        defaultRequest {
-            url("https://music.youtube.com/youtubei/v1/")
-        }
+    private fun createClient() = httpClientBuilder.build {
+        setDefaultURL("https://music.youtube.com/youtubei/v1/")
     }
 
-    private fun HttpRequestBuilder.ytClient(client: YouTubeClient, setLogin: Boolean = false) {
-        contentType(ContentType.Application.Json)
-        headers {
-            append("X-Goog-Api-Format-Version", "1")
-            append("X-YouTube-Client-Name", client.clientName)
-            append("X-YouTube-Client-Version", client.clientVersion)
-            append("x-origin", "https://music.youtube.com")
+    private suspend inline fun <reified T> ytClientCall(
+        url: String = "",
+        params: Map<String, String> = emptyMap(),
+        headers: Map<String, String> = emptyMap(),
+        body: HttpClient.BodyType = HttpClient.BodyType.NONE,
+        client: YouTubeClient,
+        setLogin: Boolean = false
+    ): T = httpClient.post(
+        url,
+        params = mutableMapOf(
+            "key" to client.api_key,
+            "prettyPrint" to "false"
+        ).apply {
+            putAll(params)
+        },
+        headers = mutableMapOf(
+            "X-Goog-Api-Format-Version" to "1",
+            "X-YouTube-Client-Name" to client.clientName,
+            "X-YouTube-Client-Version" to client.clientVersion,
+            "x-origin" to "https://music.youtube.com",
+            "Content-Type" to "application/json",
+            "User-Agent" to client.userAgent,
+        ).apply {
             if (client.referer != null) {
-                append("Referer", client.referer)
+                put("Referer", client.referer)
             }
+
             if (setLogin) {
                 cookie?.let { cookie ->
-                    append("cookie", cookie)
+                    put("cookie", cookie)
                     if ("SAPISID" !in cookieMap) return@let
                     val currentTime = devicePreferences.getSystemTimeMillis() / 1000
-                    val sapisidHash = sha1("$currentTime ${cookieMap["SAPISID"]} https://music.youtube.com")
-                    append("Authorization", "SAPISIDHASH ${currentTime}_${sapisidHash}")
+                    val sapisidHash =
+                        sha1("$currentTime ${cookieMap["SAPISID"]} https://music.youtube.com")
+                    put("Authorization", "SAPISIDHASH ${currentTime}_${sapisidHash}")
                 }
             }
+
+            putAll(headers)
         }
-        userAgent(client.userAgent)
-        parameter("key", client.api_key)
-        parameter("prettyPrint", false)
-    }
+    )
 
     suspend fun search(
         client: YouTubeClient,
         query: String? = null,
         params: String? = null,
         continuation: String? = null,
-    ) = httpClient.post("search") {
-        ytClient(client)
-        setBody(
-            SearchBody(
-                context = client.toContext(locale, visitorData),
-                query = query,
-                params = params
+    ): SearchResponse = ytClientCall(
+        url = "search",
+        params = mutableMapOf(
+            "continuation" to continuation.toString(),
+            "ctoken" to continuation.toString(),
+        ).apply {
+            if (continuation != null) {
+                put("type", "next")
+            }
+
+        },
+        body = HttpClient.BodyType.JSON(
+            Json.encodeToString(
+                SearchBody(
+                    context = client.toContext(locale, visitorData),
+                    query = query,
+                    params = params
+                )
             )
-        )
-        parameter("continuation", continuation)
-        parameter("ctoken", continuation)
-    }
+        ),
+        client = client
+    )
 
     suspend fun player(
         client: YouTubeClient,
         videoId: String,
         playlistId: String?,
-    ) = httpClient.post("player") {
-        ytClient(client, setLogin = true)
-        setBody(
-            PlayerBody(
-                context = client.toContext(locale, visitorData).let {
-                    if (client == YouTubeClient.TVHTML5) {
-                        it.copy(
-                            thirdParty = Context.ThirdParty(
-                                embedUrl = "https://www.youtube.com/watch?v=${videoId}"
+    ): PlayerResponse = ytClientCall(
+        url = "player",
+        client = client,
+        setLogin = true,
+        body = HttpClient.BodyType.JSON(
+            Json.encodeToString(
+                PlayerBody(
+                    context = client.toContext(locale, visitorData).let {
+                        if (client == YouTubeClient.TVHTML5) {
+                            it.copy(
+                                thirdParty = Context.ThirdParty(
+                                    embedUrl = "https://www.youtube.com/watch?v=${videoId}"
+                                )
                             )
-                        )
-                    } else it
-                },
-                videoId = videoId,
-                playlistId = playlistId
+                        } else it
+                    },
+                    videoId = videoId,
+                    playlistId = playlistId
+                )
             )
         )
-    }
+    )
 
-    suspend fun pipedStreams(videoId: String) =
-        httpClient.get("https://pipedapi.kavin.rocks/streams/${videoId}") {
-            contentType(ContentType.Application.Json)
-        }
+    suspend fun pipedStreams(videoId: String): PipedResponse =
+        httpClient.get(
+            "https://pipedapi.kavin.rocks/streams/${videoId}",
+            headers = mapOf("Content-Type" to "application/json")
+        )
 
     suspend fun browse(
         client: YouTubeClient,
@@ -129,21 +163,28 @@ class InnerTube(
         params: String? = null,
         continuation: String? = null,
         setLogin: Boolean = false,
-    ) = httpClient.post("browse") {
-        ytClient(client, setLogin)
-        setBody(
-            BrowseBody(
-                context = client.toContext(locale, visitorData),
-                browseId = browseId,
-                params = params
+    ): BrowseResponse = ytClientCall(
+        url = "browse",
+        client = client,
+        setLogin = setLogin,
+        body = HttpClient.BodyType.JSON(
+            Json.encodeToString(
+                BrowseBody(
+                    context = client.toContext(locale, visitorData),
+                    browseId = browseId,
+                    params = params
+                )
             )
-        )
-        parameter("continuation", continuation)
-        parameter("ctoken", continuation)
-        if (continuation != null) {
-            parameter("type", "next")
+        ),
+        params = mutableMapOf(
+            "continuation" to continuation.toString(),
+            "ctoken" to continuation.toString(),
+        ).apply {
+            if (continuation != null) {
+                put("type", "next")
+            }
         }
-    }
+    )
 
     suspend fun next(
         client: YouTubeClient,
@@ -153,69 +194,91 @@ class InnerTube(
         index: Int?,
         params: String?,
         continuation: String? = null,
-    ) = httpClient.post("next") {
-        ytClient(client, setLogin = true)
-        setBody(
-            NextBody(
-                context = client.toContext(locale, visitorData),
-                videoId = videoId,
-                playlistId = playlistId,
-                playlistSetVideoId = playlistSetVideoId,
-                index = index,
-                params = params,
-                continuation = continuation
+    ): NextResponse = ytClientCall(
+        url = "next",
+        client = client,
+        setLogin = true,
+        body = HttpClient.BodyType.JSON(
+            Json.encodeToString(
+                NextBody(
+                    context = client.toContext(locale, visitorData),
+                    videoId = videoId,
+                    playlistId = playlistId,
+                    playlistSetVideoId = playlistSetVideoId,
+                    index = index,
+                    params = params,
+                    continuation = continuation
+                )
             )
         )
-    }
+    )
 
     suspend fun getSearchSuggestions(
         client: YouTubeClient,
         input: String,
-    ) = httpClient.post("music/get_search_suggestions") {
-        ytClient(client)
-        setBody(
-            GetSearchSuggestionsBody(
-                context = client.toContext(locale, visitorData),
-                input = input
+    ): GetSearchSuggestionsResponse = ytClientCall(
+        url = "music/get_search_suggestions",
+        client = client,
+        body = HttpClient.BodyType.JSON(
+            GlobalJson.encodeToString(
+                GetSearchSuggestionsBody(
+                    context = client.toContext(locale, visitorData),
+                    input = input
+                )
             )
         )
-    }
+    )
 
     suspend fun getQueue(
         client: YouTubeClient,
         videoIds: List<String>?,
         playlistId: String?,
-    ) = httpClient.post("music/get_queue") {
-        ytClient(client)
-        setBody(
-            GetQueueBody(
-                context = client.toContext(locale, visitorData),
-                videoIds = videoIds,
-                playlistId = playlistId
+    ): GetQueueResponse = ytClientCall(
+        url = "music/get_queue",
+        client = client,
+        body = HttpClient.BodyType.JSON(
+            GlobalJson.encodeToString(
+                GetQueueBody(
+                    context = client.toContext(locale, visitorData),
+                    videoIds = videoIds,
+                    playlistId = playlistId
+                )
             )
         )
-    }
+    )
 
     suspend fun getTranscript(
         client: YouTubeClient,
         videoId: String,
-    ) = httpClient.post("https://music.youtube.com/youtubei/v1/get_transcript") {
-        parameter("key", "AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX3")
-        headers {
-            append("Content-Type", "application/json")
-        }
-        setBody(
-            GetTranscriptBody(
-                context = client.toContext(locale, null),
-                params = "\n${11.toChar()}$videoId".encodeBase64()
+    ): GetTranscriptResponse = httpClient.post(
+        url = "https://music.youtube.com/youtubei/v1/get_transcript",
+        params = mapOf(
+            "key" to "AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX3"
+        ),
+        headers = mapOf(
+            "Content-Type" to "application/json"
+        ),
+        body = HttpClient.BodyType.JSON(
+            GlobalJson.encodeToString(
+                GetTranscriptBody(
+                    context = client.toContext(locale, null),
+                    params = crypto.encodeBase64("\n${11.toChar()}$videoId")
+                )
             )
         )
-    }
+    )
 
-    suspend fun getSwJsData() = httpClient.get("https://music.youtube.com/sw.js_data")
+    suspend fun getSwJsData() = httpClient.getAsString("https://music.youtube.com/sw.js_data")
 
-    suspend fun accountMenu(client: YouTubeClient) = httpClient.post("account/account_menu") {
-        ytClient(client, setLogin = true)
-        setBody(AccountMenuBody(client.toContext(locale, visitorData)))
-    }
+    suspend fun accountMenu(client: YouTubeClient): AccountMenuResponse =
+        ytClientCall(
+            url = "account/account_menu",
+            setLogin = true,
+            client = client,
+            body = HttpClient.BodyType.JSON(
+                GlobalJson.encodeToString(
+                    AccountMenuBody(client.toContext(locale, visitorData))
+                )
+            )
+        )
 }

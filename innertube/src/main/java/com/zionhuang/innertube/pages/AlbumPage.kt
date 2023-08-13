@@ -23,13 +23,16 @@ data class AlbumPage(
                 album = renderer.flexColumns.getOrNull(2)?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.firstOrNull()?.let {
                     Album(
                         name = it.text,
-                        id = it.navigationEndpoint?.browseEndpoint?.browseId!!
+                        id = it.navigationEndpoint?.browseEndpoint?.browseId ?: ""
                     )
                 } ?: return null,
                 duration = renderer.fixedColumns?.firstOrNull()
                     ?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.firstOrNull()
-                    ?.text?.parseTime() ?: return null,
-                thumbnail = renderer.thumbnail?.musicThumbnailRenderer?.getThumbnailUrl() ?: return null,
+                    ?.text?.parseTime()
+                    ?: renderer.flexColumns.getOrNull(3)?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.firstOrNull()
+                        ?.text?.parseTime()
+                    ?: return null,
+                thumbnail = renderer.thumbnail?.musicThumbnailRenderer?.getThumbnailUrl() ?: "",
                 explicit = renderer.badges?.find {
                     it.musicInlineBadgeRenderer.icon.iconType == "MUSIC_EXPLICIT_BADGE"
                 } != null
