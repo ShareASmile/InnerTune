@@ -2,7 +2,6 @@ package com.zionhuang.innertube.utils
 
 import com.zionhuang.innertube.YouTube
 import com.zionhuang.innertube.pages.PlaylistPage
-import java.security.MessageDigest
 
 suspend fun Result<PlaylistPage>.completed() = runCatching {
     val page = getOrThrow()
@@ -21,9 +20,9 @@ suspend fun Result<PlaylistPage>.completed() = runCatching {
     )
 }
 
-fun ByteArray.toHex(): String = joinToString(separator = "") { eachByte -> "%02x".format(eachByte) }
+/*fun ByteArray.toHex(): String = joinToString(separator = "") { eachByte -> "%02x".format(eachByte) }
 
-fun sha1(str: String): String = MessageDigest.getInstance("SHA-1").digest(str.toByteArray()).toHex()
+fun sha1(str: String): String = MessageDigest.getInstance("SHA-1").digest(str.toByteArray()).toHex()*/
 
 fun parseCookieString(cookie: String): Map<String, String> =
     cookie.split("; ")

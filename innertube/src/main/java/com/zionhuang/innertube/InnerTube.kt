@@ -14,7 +14,6 @@ import com.zionhuang.innertube.models.response.PipedResponse
 import com.zionhuang.innertube.models.response.PlayerResponse
 import com.zionhuang.innertube.models.response.SearchResponse
 import com.zionhuang.innertube.utils.parseCookieString
-import com.zionhuang.innertube.utils.sha1
 import `in`.shabinder.soundbound.providers.Dependencies
 import `in`.shabinder.soundbound.utils.DevicePreferences
 import `in`.shabinder.soundbound.utils.GlobalJson
@@ -23,10 +22,8 @@ import `in`.shabinder.soundbound.zipline.LocaleProvider
 import `in`.shabinder.soundbound.zipline.build
 import `in`.shabinder.soundbound.zipline.get
 import `in`.shabinder.soundbound.zipline.post
-import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import java.util.*
 
 /**
  * Provide access to InnerTube endpoints.
@@ -88,7 +85,7 @@ class InnerTube(
                     if ("SAPISID" !in cookieMap) return@let
                     val currentTime = devicePreferences.getSystemTimeMillis() / 1000
                     val sapisidHash =
-                        sha1("$currentTime ${cookieMap["SAPISID"]} https://music.youtube.com")
+                        crypto.sha1Hex("$currentTime ${cookieMap["SAPISID"]} https://music.youtube.com")
                     put("Authorization", "SAPISIDHASH ${currentTime}_${sapisidHash}")
                 }
             }
