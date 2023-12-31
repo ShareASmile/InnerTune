@@ -1,4 +1,4 @@
-<resources xmlns:tools="http://schemas.android.com/tools">
+<resources>
     <!-- Bottom navigation -->
     <string name="home">ホーム</string>
     <string name="songs">曲</string>
@@ -35,6 +35,9 @@
     <string name="search">検索</string>
     <string name="search_yt_music">YouTube Musicを検索…</string>
     <string name="search_library">ライブラリを検索…</string>
+    <string name="filter_library">Library</string>
+    <string name="filter_liked">Liked</string>
+    <string name="filter_downloaded">Downloaded</string>
     <string name="filter_all">すべて</string>
     <string name="filter_songs">曲</string>
     <string name="filter_videos">動画</string>
@@ -43,6 +46,7 @@
     <string name="filter_playlists">プレイリスト</string>
     <string name="filter_community_playlists">コミュニティのプレイリスト</string>
     <string name="filter_featured_playlists">おすすめのプレイリスト</string>
+    <string name="filter_bookmarked">Bookmarked</string>
     <string name="no_results_found">見つかりませんでした</string>
 
     <!-- Artist screen -->
@@ -57,6 +61,7 @@
     <string name="retry">再試行</string>
     <string name="radio">ラジオ</string>
     <string name="shuffle">シャッフル</string>
+    <string name="reset">Reset</string>
 
     <!-- Menu -->
     <string name="details">詳細</string>
@@ -80,6 +85,7 @@
     <string name="remove_from_history">履歴から削除</string>
     <string name="search_online">オンラインで検索</string>
     <string name="sync">同期</string>
+    <string name="advanced">Advanced</string>
 
     <!-- Sort menu -->
     <string name="sort_by_create_date">追加日時</string>
@@ -136,16 +142,13 @@
     <plurals name="n_playlist">
         <item quantity="other">%d プレイリスト</item>
     </plurals>
-    <plurals name="n_week" tools:ignore="MissingQuantity">
-        <item quantity="one">%d週間</item>
+    <plurals name="n_week">
         <item quantity="other">%d週間</item>
     </plurals>
-    <plurals name="n_month" tools:ignore="MissingQuantity">
-        <item quantity="one">%dか月</item>
+    <plurals name="n_month">
         <item quantity="other">%dか月</item>
     </plurals>
-    <plurals name="n_year" tools:ignore="MissingQuantity">
-        <item quantity="one">%d年</item>
+    <plurals name="n_year">
         <item quantity="other">%d年</item>
     </plurals>
 
@@ -170,6 +173,11 @@
     <!-- Player action -->
     <string name="action_like">いいね</string>
     <string name="action_remove_like">いいねを削除</string>
+    <string name="action_shuffle_on">Shuffle on</string>
+    <string name="action_shuffle_off">Shuffle off</string>
+    <string name="repeat_mode_off">Repeat mode off</string>
+    <string name="repeat_mode_one">Repeat current song</string>
+    <string name="repeat_mode_all">Repeat queue</string>
 
     <!-- Queue Title -->
     <string name="queue_all_songs">すべての曲</string>
@@ -246,4 +254,8 @@
 
     <string name="about">アプリについて</string>
     <string name="app_version">アプリのバージョン</string>
+
+    <string name="new_version_available">New version available</string>
+    <string name="translation_models">Translation Models</string>
+    <string name="clear_translation_models">Clear translation models</string>
 </resources>

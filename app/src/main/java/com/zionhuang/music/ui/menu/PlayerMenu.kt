@@ -1,7 +1,6 @@
 package com.zionhuang.music.ui.menu
 
 import android.content.Intent
-import android.content.res.Configuration.ORIENTATION_LANDSCAPE
 import android.media.audiofx.AudioEffect
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -9,6 +8,7 @@ import androidx.annotation.DrawableRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -18,11 +18,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -32,14 +35,15 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.net.toUri
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.exoplayer.offline.DownloadRequest
@@ -47,12 +51,12 @@ import androidx.media3.exoplayer.offline.DownloadService
 import androidx.navigation.NavController
 import com.zionhuang.music.LocalDatabase
 import com.zionhuang.music.LocalDownloadUtil
+import com.zionhuang.music.LocalPlayerConnection
 import com.zionhuang.music.R
 import com.zionhuang.music.constants.ListItemHeight
 import com.zionhuang.music.db.entities.PlaylistSongMap
 import com.zionhuang.music.models.MediaMetadata
 import com.zionhuang.music.playback.ExoDownloadService
-import com.zionhuang.music.playback.PlayerConnection
 import com.zionhuang.music.ui.component.BigSeekBar
 import com.zionhuang.music.ui.component.BottomSheetState
 import com.zionhuang.music.ui.component.DownloadGridMenu
@@ -68,14 +72,14 @@ fun PlayerMenu(
     mediaMetadata: MediaMetadata?,
     navController: NavController,
     playerBottomSheetState: BottomSheetState,
-    playerConnection: PlayerConnection,
+    isQueueTrigger: Boolean? = false,
     onShowDetailsDialog: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     mediaMetadata ?: return
     val context = LocalContext.current
     val database = LocalDatabase.current
-    val localConfiguration = LocalConfiguration.current
+    val playerConnection = LocalPlayerConnection.current ?: return
     val playerVolume = playerConnection.service.playerVolume.collectAsState()
     val activityResultLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
 
@@ -138,94 +142,36 @@ fun PlayerMenu(
         }
     }
 
-    var tempo by remember {
-        mutableStateOf(playerConnection.player.playbackParameters.speed)
-    }
-    var transposeValue by remember {
-        mutableStateOf(round(12 * log2(playerConnection.player.playbackParameters.pitch)).toInt())
-    }
-    val updatePlaybackParameters = {
-        playerConnection.player.playbackParameters = PlaybackParameters(tempo, 2f.pow(transposeValue.toFloat() / 12))
+    var showPitchTempoDialog by rememberSaveable {
+        mutableStateOf(false)
     }
 
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(24.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 24.dp)
-            .padding(top = 24.dp, bottom = 6.dp)
-    ) {
-        Icon(
-            painter = painterResource(R.drawable.volume_up),
-            contentDescription = null,
-            modifier = Modifier.size(28.dp)
-        )
-
-        BigSeekBar(
-            progressProvider = playerVolume::value,
-            onProgressChange = { playerConnection.service.playerVolume.value = it },
-            modifier = Modifier.weight(1f)
+    if (showPitchTempoDialog) {
+        PitchTempoDialog(
+            onDismiss = { showPitchTempoDialog = false }
         )
     }
-
-    if (localConfiguration.orientation == ORIENTATION_LANDSCAPE) {
+    if (isQueueTrigger != true) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(24.dp),
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp)
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp)
+                .padding(top = 24.dp, bottom = 6.dp)
         ) {
-            ValueAdjuster(
-                icon = R.drawable.slow_motion_video,
-                currentValue = tempo,
-                values = listOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f),
-                onValueUpdate = {
-                    tempo = it
-                    updatePlaybackParameters()
-                },
-                valueText = { "x$it" },
-                modifier = Modifier.weight(1f)
+            Icon(
+                painter = painterResource(R.drawable.volume_up),
+                contentDescription = null,
+                modifier = Modifier.size(28.dp)
             )
 
-            ValueAdjuster(
-                icon = R.drawable.tune,
-                currentValue = transposeValue,
-                values = (-12..12).toList(),
-                onValueUpdate = {
-                    transposeValue = it
-                    updatePlaybackParameters()
-                },
-                valueText = { "${if (it > 0) "+" else ""}$it" },
+            BigSeekBar(
+                progressProvider = playerVolume::value,
+                onProgressChange = { playerConnection.service.playerVolume.value = it },
                 modifier = Modifier.weight(1f)
             )
         }
-    } else {
-        ValueAdjuster(
-            icon = R.drawable.slow_motion_video,
-            currentValue = tempo,
-            values = listOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f),
-            onValueUpdate = {
-                tempo = it
-                updatePlaybackParameters()
-            },
-            valueText = { "x$it" },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 6.dp)
-        )
-
-        ValueAdjuster(
-            icon = R.drawable.tune,
-            currentValue = transposeValue,
-            values = (-12..12).toList(),
-            onValueUpdate = {
-                transposeValue = it
-                updatePlaybackParameters()
-            },
-            valueText = { "${if (it > 0) "+" else ""}$it" },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 6.dp)
-        )
     }
 
     GridMenu(
@@ -309,28 +255,103 @@ fun PlayerMenu(
             context.startActivity(Intent.createChooser(intent, null))
             onDismiss()
         }
-        GridMenuItem(
-            icon = R.drawable.info,
-            title = R.string.details
-        ) {
-            onShowDetailsDialog()
-            onDismiss()
-        }
-        GridMenuItem(
-            icon = R.drawable.equalizer,
-            title = R.string.equalizer
-        ) {
-            val intent = Intent(AudioEffect.ACTION_DISPLAY_AUDIO_EFFECT_CONTROL_PANEL).apply {
-                putExtra(AudioEffect.EXTRA_AUDIO_SESSION, playerConnection.player.audioSessionId)
-                putExtra(AudioEffect.EXTRA_PACKAGE_NAME, context.packageName)
-                putExtra(AudioEffect.EXTRA_CONTENT_TYPE, AudioEffect.CONTENT_TYPE_MUSIC)
+        if (isQueueTrigger != true) {
+            GridMenuItem(
+                icon = R.drawable.info,
+                title = R.string.details
+            ) {
+                onShowDetailsDialog()
+                onDismiss()
             }
-            if (intent.resolveActivity(context.packageManager) != null) {
-                activityResultLauncher.launch(intent)
+            GridMenuItem(
+                icon = R.drawable.equalizer,
+                title = R.string.equalizer
+            ) {
+                val intent = Intent(AudioEffect.ACTION_DISPLAY_AUDIO_EFFECT_CONTROL_PANEL).apply {
+                    putExtra(
+                        AudioEffect.EXTRA_AUDIO_SESSION,
+                        playerConnection.player.audioSessionId
+                    )
+                    putExtra(AudioEffect.EXTRA_PACKAGE_NAME, context.packageName)
+                    putExtra(AudioEffect.EXTRA_CONTENT_TYPE, AudioEffect.CONTENT_TYPE_MUSIC)
+                }
+                if (intent.resolveActivity(context.packageManager) != null) {
+                    activityResultLauncher.launch(intent)
+                }
+                onDismiss()
             }
-            onDismiss()
+            GridMenuItem(
+                icon = R.drawable.tune,
+                title = R.string.advanced
+            ) {
+                showPitchTempoDialog = true
+            }
         }
     }
+}
+
+@Composable
+fun PitchTempoDialog(
+    onDismiss: () -> Unit,
+) {
+    val playerConnection = LocalPlayerConnection.current ?: return
+    var tempo by remember {
+        mutableStateOf(playerConnection.player.playbackParameters.speed)
+    }
+    var transposeValue by remember {
+        mutableStateOf(round(12 * log2(playerConnection.player.playbackParameters.pitch)).toInt())
+    }
+    val updatePlaybackParameters = {
+        playerConnection.player.playbackParameters = PlaybackParameters(tempo, 2f.pow(transposeValue.toFloat() / 12))
+    }
+
+    AlertDialog(
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+        onDismissRequest = onDismiss,
+        dismissButton = {
+            TextButton(
+                onClick = {
+                    tempo = 1f
+                    transposeValue = 0
+                    updatePlaybackParameters()
+                }
+            ) {
+                Text(stringResource(R.string.reset))
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onDismiss
+            ) {
+                Text(stringResource(android.R.string.ok))
+            }
+        },
+        text = {
+            Column {
+                ValueAdjuster(
+                    icon = R.drawable.slow_motion_video,
+                    currentValue = tempo,
+                    values = listOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f),
+                    onValueUpdate = {
+                        tempo = it
+                        updatePlaybackParameters()
+                    },
+                    valueText = { "x$it" },
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+                ValueAdjuster(
+                    icon = R.drawable.discover_tune,
+                    currentValue = transposeValue,
+                    values = (-12..12).toList(),
+                    onValueUpdate = {
+                        transposeValue = it
+                        updatePlaybackParameters()
+                    },
+                    valueText = { "${if (it > 0) "+" else ""}$it" }
+                )
+            }
+        }
+    )
 }
 
 @Composable
@@ -340,7 +361,7 @@ fun <T> ValueAdjuster(
     values: List<T>,
     onValueUpdate: (T) -> Unit,
     valueText: (T) -> String,
-    modifier: Modifier,
+    modifier: Modifier = Modifier,
 ) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(24.dp),
@@ -369,7 +390,7 @@ fun <T> ValueAdjuster(
             text = valueText(currentValue),
             style = MaterialTheme.typography.titleMedium,
             textAlign = TextAlign.Center,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.width(80.dp)
         )
 
         IconButton(

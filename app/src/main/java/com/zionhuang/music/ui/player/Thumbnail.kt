@@ -7,6 +7,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
@@ -18,15 +19,14 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.zionhuang.music.LocalPlayerConnection
+import com.zionhuang.music.constants.PlayerHorizontalPadding
 import com.zionhuang.music.constants.ShowLyricsKey
 import com.zionhuang.music.constants.ThumbnailCornerRadius
 import com.zionhuang.music.extensions.metadata
 import com.zionhuang.music.ui.component.Lyrics
-import com.zionhuang.music.ui.utils.HorizontalPager
 import com.zionhuang.music.ui.utils.SnapLayoutInfoProvider
 import com.zionhuang.music.utils.rememberPreference
 import kotlinx.coroutines.flow.drop
-import kotlin.math.abs
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -40,6 +40,8 @@ fun Thumbnail(
     val windows by playerConnection.queueWindows.collectAsState()
     val currentWindowIndex by playerConnection.currentWindowIndex.collectAsState()
     val error by playerConnection.error.collectAsState()
+
+    val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
 
     val showLyrics by rememberPreference(ShowLyricsKey, false)
 
@@ -55,29 +57,17 @@ fun Thumbnail(
     }
 
     LaunchedEffect(pagerState, currentWindowIndex) {
-        if (windows.isNotEmpty()) {
-            try {
-                if (abs(pagerState.currentPage - currentWindowIndex) <= 1) {
-                    pagerState.animateScrollToPage(currentWindowIndex)
-                } else {
-                    pagerState.scrollToPage(currentWindowIndex)
-                }
-            } catch (_: Exception) {
-            }
+        try {
+            pagerState.scrollToPage(currentWindowIndex)
+        } catch (_: Exception) {
         }
     }
 
     LaunchedEffect(pagerState) {
-        snapshotFlow { pagerState.settledPage }.drop(1).collect { index ->
-            if (!pagerState.isScrollInProgress && index != currentWindowIndex && windows.isNotEmpty()) {
-                playerConnection.player.seekToDefaultPosition(windows[index].firstPeriodIndex)
+        snapshotFlow { pagerState.settledPage }.drop(1).collect {
+            if (!pagerState.isScrollInProgress) {
+                playerConnection.player.seekToDefaultPosition(it)
             }
-        }
-    }
-
-    LaunchedEffect(showLyrics) {
-        if (!showLyrics) {
-            pagerState.scrollToPage(currentWindowIndex)
         }
     }
 
@@ -97,34 +87,48 @@ fun Thumbnail(
                 .fillMaxSize()
                 .statusBarsPadding()
         ) {
-            HorizontalPager(
-                state = pagerState,
-                flingBehavior = rememberSnapFlingBehavior(snapLayoutInfoProvider),
-                items = windows,
-                key = { it.uid.hashCode() },
-                beyondBoundsPageCount = 2
-            ) { window ->
-                Box(Modifier.fillMaxSize()) {
-                    AsyncImage(
-                        model = window.mediaItem.metadata?.thumbnailUrl,
-                        contentDescription = null,
+            windows.takeIf { it.isNotEmpty() }?.let { windows ->
+                HorizontalPager(
+                    state = pagerState,
+                    flingBehavior = rememberSnapFlingBehavior(snapLayoutInfoProvider),
+                    pageCount = windows.size,
+                    key = { windows[it].uid.hashCode() },
+                    beyondBoundsPageCount = 2,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .statusBarsPadding()
+                ) { index ->
+                    Box(
+                        contentAlignment = Alignment.Center,
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp)
-                            .clip(RoundedCornerShape(ThumbnailCornerRadius))
-                            .align(Alignment.Center)
-                            .pointerInput(Unit) {
-                                detectTapGestures(
-                                    onDoubleTap = { offset ->
-                                        if (offset.x < size.width / 2) {
-                                            playerConnection.player.seekBack()
-                                        } else {
-                                            playerConnection.player.seekForward()
+                            .fillMaxSize()
+                            .padding(horizontal = PlayerHorizontalPadding)
+                    ) {
+                        val model = if (currentWindowIndex == index){
+                            mediaMetadata?.thumbnailUrl
+                        } else {
+                            windows[index].mediaItem.metadata?.thumbnailUrl
+                        }
+                        AsyncImage(
+                            model = windows[index].mediaItem.metadata?.thumbnailUrl,
+//                            model = model,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(ThumbnailCornerRadius * 2))
+                                .pointerInput(Unit) {
+                                    detectTapGestures(
+                                        onDoubleTap = { offset ->
+                                            if (offset.x < size.width / 2) {
+                                                playerConnection.player.seekBack()
+                                            } else {
+                                                playerConnection.player.seekForward()
+                                            }
                                         }
-                                    }
-                                )
-                            }
-                    )
+                                    )
+                                }
+                        )
+                    }
                 }
             }
         }
@@ -134,7 +138,9 @@ fun Thumbnail(
             enter = fadeIn(),
             exit = fadeOut()
         ) {
-            Lyrics(sliderPositionProvider = sliderPositionProvider)
+            Lyrics(
+                sliderPositionProvider = sliderPositionProvider
+            )
         }
 
         AnimatedVisibility(

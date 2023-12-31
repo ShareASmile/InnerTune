@@ -17,8 +17,10 @@ import androidx.compose.animation.core.*
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.*
 import androidx.compose.material3.*
@@ -26,6 +28,8 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -48,8 +52,6 @@ import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
-import androidx.media3.session.MediaController
-import androidx.media3.session.SessionToken
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -59,14 +61,11 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import coil.imageLoader
 import coil.request.ImageRequest
-import com.google.common.util.concurrent.MoreExecutors
 import com.valentinilk.shimmer.LocalShimmerTheme
 import com.zionhuang.innertube.YouTube
 import com.zionhuang.innertube.models.SongItem
 import com.zionhuang.music.constants.*
 import com.zionhuang.music.db.MusicDatabase
-import com.zionhuang.music.db.entities.PlaylistEntity.Companion.DOWNLOADED_PLAYLIST_ID
-import com.zionhuang.music.db.entities.PlaylistEntity.Companion.LIKED_PLAYLIST_ID
 import com.zionhuang.music.db.entities.SearchHistory
 import com.zionhuang.music.extensions.*
 import com.zionhuang.music.playback.DownloadUtil
@@ -85,7 +84,6 @@ import com.zionhuang.music.ui.screens.library.LibraryAlbumsScreen
 import com.zionhuang.music.ui.screens.library.LibraryArtistsScreen
 import com.zionhuang.music.ui.screens.library.LibraryPlaylistsScreen
 import com.zionhuang.music.ui.screens.library.LibrarySongsScreen
-import com.zionhuang.music.ui.screens.playlist.BuiltInPlaylistScreen
 import com.zionhuang.music.ui.screens.playlist.LocalPlaylistScreen
 import com.zionhuang.music.ui.screens.playlist.OnlinePlaylistScreen
 import com.zionhuang.music.ui.screens.search.LocalSearchScreen
@@ -100,6 +98,8 @@ import com.zionhuang.music.utils.dataStore
 import com.zionhuang.music.utils.get
 import com.zionhuang.music.utils.rememberEnumPreference
 import com.zionhuang.music.utils.rememberPreference
+import com.zionhuang.music.utils.reportException
+import com.zionhuang.music.utils.setupRemoteConfig
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
@@ -118,11 +118,10 @@ class MainActivity : ComponentActivity() {
     lateinit var downloadUtil: DownloadUtil
 
     private var playerConnection by mutableStateOf<PlayerConnection?>(null)
-    private var mediaController: MediaController? = null
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             if (service is MusicBinder) {
-                playerConnection = PlayerConnection(service, database, lifecycleScope)
+                playerConnection = PlayerConnection(this@MainActivity, service, database, lifecycleScope)
             }
         }
 
@@ -131,20 +130,17 @@ class MainActivity : ComponentActivity() {
             playerConnection = null
         }
     }
+    var latestVersion by mutableStateOf(BuildConfig.VERSION_CODE.toLong())
 
     override fun onStart() {
         super.onStart()
+        startService(Intent(this, MusicService::class.java))
         bindService(Intent(this, MusicService::class.java), serviceConnection, Context.BIND_AUTO_CREATE)
     }
 
     override fun onStop() {
-        super.onStop()
         unbindService(serviceConnection)
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        mediaController?.release()
+        super.onStop()
     }
 
     @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
@@ -153,14 +149,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
-        // Connect to service so that notification and background playing will work
-        val sessionToken = SessionToken(this, ComponentName(this, MusicService::class.java))
-        val controllerFuture = MediaController.Builder(this, sessionToken).buildAsync()
-        controllerFuture.addListener(
-            { mediaController = controllerFuture.get() },
-            MoreExecutors.directExecutor()
-        )
-
+        setupRemoteConfig()
 
         setContent {
             val enableDynamicTheme by rememberPreference(DynamicThemeKey, defaultValue = true)
@@ -222,6 +211,14 @@ class MainActivity : ComponentActivity() {
                     val defaultOpenTab = remember {
                         dataStore[DefaultOpenTabKey].toEnum(defaultValue = NavigationTab.HOME)
                     }
+                    val tabOpenedFromShortcut = remember {
+                        when (intent?.action) {
+                            ACTION_SONGS -> NavigationTab.SONG
+                            ACTION_ALBUMS -> NavigationTab.ALBUM
+                            ACTION_PLAYLISTS -> NavigationTab.PLAYLIST
+                            else -> null
+                        }
+                    }
 
                     val (query, onQueryChange) = rememberSaveable(stateSaver = TextFieldValue.Saver) {
                         mutableStateOf(TextFieldValue())
@@ -240,6 +237,8 @@ class MainActivity : ComponentActivity() {
                     }
                     var searchSource by rememberEnumPreference(SearchSourceKey, SearchSource.ONLINE)
 
+                    val searchBarFocusRequester = remember { FocusRequester() }
+
                     val onSearch: (String) -> Unit = {
                         if (it.isNotEmpty()) {
                             onActiveChange(false)
@@ -250,6 +249,10 @@ class MainActivity : ComponentActivity() {
                                 }
                             }
                         }
+                    }
+
+                    var openSearchImmediately: Boolean by remember {
+                        mutableStateOf(intent?.action == ACTION_SEARCH)
                     }
 
                     val shouldShowSearchBar = remember(active, navBackStackEntry) {
@@ -349,7 +352,7 @@ class MainActivity : ComponentActivity() {
                                                     navController.navigate("album/$browseId")
                                                 }
                                             }.onFailure {
-                                                it.printStackTrace()
+                                                reportException(it)
                                             }
                                         }
                                     } else {
@@ -372,7 +375,7 @@ class MainActivity : ComponentActivity() {
                                         }.onSuccess {
                                             sharedSong = it.firstOrNull()
                                         }.onFailure {
-                                            it.printStackTrace()
+                                            reportException(it)
                                         }
                                     }
                                 }
@@ -393,7 +396,7 @@ class MainActivity : ComponentActivity() {
                     ) {
                         NavHost(
                             navController = navController,
-                            startDestination = when (defaultOpenTab) {
+                            startDestination = when (tabOpenedFromShortcut ?: defaultOpenTab) {
                                 NavigationTab.HOME -> Screens.Home
                                 NavigationTab.SONG -> Screens.Songs
                                 NavigationTab.ARTIST -> Screens.Artists
@@ -512,13 +515,8 @@ class MainActivity : ComponentActivity() {
                                         type = NavType.StringType
                                     }
                                 )
-                            ) { backStackEntry ->
-                                val playlistId = backStackEntry.arguments?.getString("playlistId")!!
-                                if (playlistId == LIKED_PLAYLIST_ID || playlistId == DOWNLOADED_PLAYLIST_ID) {
-                                    BuiltInPlaylistScreen(navController, scrollBehavior)
-                                } else {
-                                    LocalPlaylistScreen(navController, scrollBehavior)
-                                }
+                            ) {
+                                LocalPlaylistScreen(navController, scrollBehavior)
                             }
                             composable(
                                 route = "youtube_browse/{browseId}?params={params}",
@@ -536,7 +534,7 @@ class MainActivity : ComponentActivity() {
                                 YouTubeBrowseScreen(navController, scrollBehavior)
                             }
                             composable("settings") {
-                                SettingsScreen(navController, scrollBehavior)
+                                SettingsScreen(latestVersion, navController, scrollBehavior)
                             }
                             composable("settings/appearance") {
                                 AppearanceSettings(navController, scrollBehavior)
@@ -645,19 +643,33 @@ class MainActivity : ComponentActivity() {
                                             Screens.Playlists.route
                                         )
                                     ) {
-                                        IconButton(
-                                            onClick = {
-                                                navController.navigate("settings")
-                                            }
+                                        Box(
+                                            contentAlignment = Alignment.Center,
+                                            modifier = Modifier
+                                                .size(48.dp)
+                                                .clip(CircleShape)
+                                                .clickable {
+                                                    navController.navigate("settings")
+                                                }
                                         ) {
-                                            Icon(
-                                                painter = painterResource(R.drawable.settings),
-                                                contentDescription = null
-                                            )
+                                            BadgedBox(
+                                                badge = {
+                                                    if (latestVersion > BuildConfig.VERSION_CODE) {
+                                                        Badge()
+                                                    }
+                                                }
+                                            ) {
+
+                                                Icon(
+                                                    painter = painterResource(R.drawable.settings),
+                                                    contentDescription = null
+                                                )
+                                            }
                                         }
                                     }
                                 },
-                                modifier = Modifier.align(Alignment.TopCenter)
+                                focusRequester = searchBarFocusRequester,
+                                modifier = Modifier.align(Alignment.TopCenter),
                             ) {
                                 Crossfade(
                                     targetState = searchSource,
@@ -766,13 +778,20 @@ class MainActivity : ComponentActivity() {
                                             YouTubeSongMenu(
                                                 song = song,
                                                 navController = navController,
-                                                playerConnection = playerConnection,
                                                 onDismiss = { sharedSong = null }
                                             )
                                         }
                                     }
                                 }
                             }
+                        }
+                    }
+
+                    LaunchedEffect(shouldShowSearchBar, openSearchImmediately) {
+                        if (shouldShowSearchBar && openSearchImmediately) {
+                            onActiveChange(true)
+                            searchBarFocusRequester.requestFocus()
+                            openSearchImmediately = false
                         }
                     }
                 }
@@ -792,6 +811,13 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             window.navigationBarColor = (if (isDark) Color.Transparent else Color.Black.copy(alpha = 0.2f)).toArgb()
         }
+    }
+
+    companion object {
+        const val ACTION_SEARCH = "com.zionhuang.music.action.SEARCH"
+        const val ACTION_SONGS = "com.zionhuang.music.action.SONGS"
+        const val ACTION_ALBUMS = "com.zionhuang.music.action.ALBUMS"
+        const val ACTION_PLAYLISTS = "com.zionhuang.music.action.PLAYLISTS"
     }
 }
 

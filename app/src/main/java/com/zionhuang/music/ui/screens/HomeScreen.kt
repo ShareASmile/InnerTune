@@ -61,14 +61,19 @@ fun HomeScreen(
     val quickPicks by viewModel.quickPicks.collectAsState()
     val explorePage by viewModel.explorePage.collectAsState()
 
+    val forgottenFavorite by viewModel.forgottenFavorite.collectAsState()
+
     val isRefreshing by viewModel.isRefreshing.collectAsState()
     val mostPlayedLazyGridState = rememberLazyGridState()
+
+    val forgottenFavoritesLazyGridState = rememberLazyGridState()
 
     val innerTubeCookie by rememberPreference(InnerTubeCookieKey, "")
     val isLoggedIn = remember(innerTubeCookie) {
         "SAPISID" in parseCookieString(innerTubeCookie)
     }
 
+    val coroutineScope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
 
     SwipeRefresh(
@@ -81,9 +86,17 @@ fun HomeScreen(
         ) {
             val horizontalLazyGridItemWidthFactor = if (maxWidth * 0.475f >= 320.dp) 0.475f else 0.9f
             val horizontalLazyGridItemWidth = maxWidth * horizontalLazyGridItemWidthFactor
-            val snapLayoutInfoProvider = remember(mostPlayedLazyGridState) {
+            val snapLayoutInfoProviderQuickPicks = remember(mostPlayedLazyGridState) {
                 SnapLayoutInfoProvider(
                     lazyGridState = mostPlayedLazyGridState,
+                    positionInLayout = { layoutSize, itemSize ->
+                        (layoutSize * horizontalLazyGridItemWidthFactor / 2f - itemSize / 2f)
+                    }
+                )
+            }
+            val snapLayoutInfoProviderForgottenFavorite = remember(forgottenFavoritesLazyGridState) {
+                SnapLayoutInfoProvider(
+                    lazyGridState = forgottenFavoritesLazyGridState,
                     positionInLayout = { layoutSize, itemSize ->
                         (layoutSize * horizontalLazyGridItemWidthFactor / 2f - itemSize / 2f)
                     }
@@ -96,10 +109,10 @@ fun HomeScreen(
                 Spacer(Modifier.height(LocalPlayerAwareWindowInsets.current.asPaddingValues().calculateTopPadding()))
 
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier
                         .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Horizontal))
                         .padding(horizontal = 12.dp, vertical = 6.dp)
+                        .fillMaxWidth()
                 ) {
                     NavigationTile(
                         title = stringResource(R.string.history),
@@ -148,7 +161,7 @@ fun HomeScreen(
                         LazyHorizontalGrid(
                             state = mostPlayedLazyGridState,
                             rows = GridCells.Fixed(4),
-                            flingBehavior = rememberSnapFlingBehavior(snapLayoutInfoProvider),
+                            flingBehavior = rememberSnapFlingBehavior(snapLayoutInfoProviderQuickPicks),
                             contentPadding = WindowInsets.systemBars
                                 .only(WindowInsetsSides.Horizontal)
                                 .asPaddingValues(),
@@ -174,7 +187,6 @@ fun HomeScreen(
                                                     SongMenu(
                                                         originalSong = song!!,
                                                         navController = navController,
-                                                        playerConnection = playerConnection,
                                                         onDismiss = menuState::dismiss
                                                     )
                                                 }
@@ -192,7 +204,90 @@ fun HomeScreen(
                                             if (song!!.id == mediaMetadata?.id) {
                                                 playerConnection.player.togglePlayPause()
                                             } else {
-                                                playerConnection.playQueue(YouTubeQueue(WatchEndpoint(videoId = song!!.id), song!!.toMediaMetadata()))
+                                                playerConnection.playQueue(
+                                                    YouTubeQueue(
+                                                        WatchEndpoint(videoId = song!!.id),
+                                                        song!!.toMediaMetadata()
+                                                    )
+                                                )
+                                            }
+                                        }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                NavigationTitle(
+                    title = stringResource(R.string.forgotten_favorites)
+                )
+
+                forgottenFavorite?.let { forgottenFavorite ->
+                    if (forgottenFavorite.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(ListItemHeight * 4)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.quick_picks_empty),
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.align(Alignment.Center)
+                            )
+                        }
+                    } else {
+                        LazyHorizontalGrid(
+                            state = forgottenFavoritesLazyGridState,
+                            rows = GridCells.Fixed(4),
+                            flingBehavior = rememberSnapFlingBehavior(snapLayoutInfoProviderForgottenFavorite),
+                            contentPadding = WindowInsets.systemBars
+                                .only(WindowInsetsSides.Horizontal)
+                                .asPaddingValues(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(ListItemHeight * 4)
+                        ) {
+                            items(
+                                items = forgottenFavorite,
+                                key = { it.id }
+                            ) { originalSong ->
+                                val song by database.song(originalSong.id).collectAsState(initial = originalSong)
+
+                                SongListItem(
+                                    song = song!!,
+                                    showInLibraryIcon = true,
+                                    isActive = song!!.id == mediaMetadata?.id,
+                                    isPlaying = isPlaying,
+                                    trailingContent = {
+                                        IconButton(
+                                            onClick = {
+                                                menuState.show {
+                                                    SongMenu(
+                                                        originalSong = song!!,
+                                                        navController = navController,
+                                                        onDismiss = menuState::dismiss
+                                                    )
+                                                }
+                                            }
+                                        ) {
+                                            Icon(
+                                                painter = painterResource(R.drawable.more_vert),
+                                                contentDescription = null
+                                            )
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .width(horizontalLazyGridItemWidth)
+                                        .clickable {
+                                            if (song!!.id == mediaMetadata?.id) {
+                                                playerConnection.player.togglePlayPause()
+                                            } else {
+                                                playerConnection.playQueue(
+                                                    YouTubeQueue(
+                                                        WatchEndpoint(videoId = song!!.id),
+                                                        song!!.toMediaMetadata()
+                                                    )
+                                                )
                                             }
                                         }
                                 )
@@ -222,6 +317,7 @@ fun HomeScreen(
                                 item = album,
                                 isActive = mediaMetadata?.album?.id == album.id,
                                 isPlaying = isPlaying,
+                                coroutineScope = coroutineScope,
                                 modifier = Modifier
                                     .combinedClickable(
                                         onClick = {
@@ -230,9 +326,8 @@ fun HomeScreen(
                                         onLongClick = {
                                             menuState.show {
                                                 YouTubeAlbumMenu(
-                                                    album = album,
+                                                    albumItem = album,
                                                     navController = navController,
-                                                    playerConnection = playerConnection,
                                                     onDismiss = menuState::dismiss
                                                 )
                                             }
@@ -275,7 +370,7 @@ fun HomeScreen(
             }
 
             HideOnScrollFAB(
-                visible = !quickPicks.isNullOrEmpty() || explorePage?.newReleaseAlbums?.isNotEmpty() == true,
+                visible = !quickPicks.isNullOrEmpty() || !forgottenFavorite.isNullOrEmpty() || explorePage?.newReleaseAlbums?.isNotEmpty() == true,
                 scrollState = scrollState,
                 icon = R.drawable.casino,
                 onClick = {

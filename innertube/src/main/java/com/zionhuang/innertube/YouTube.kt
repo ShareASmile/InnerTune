@@ -110,14 +110,19 @@ object YouTube {
                                     ?.mapNotNull { it.musicResponsiveListItemRenderer }
                                     ?.mapNotNull(SearchSummaryPage.Companion::fromMusicResponsiveListItemRenderer)
                                     .orEmpty()
-                            ).takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                            )
+                            .distinctBy { it.id }
+                            .ifEmpty { null } ?: return@mapNotNull null
                     )
                 else
                     SearchSummary(
                         title = it.musicShelfRenderer?.title?.runs?.firstOrNull()?.text ?: return@mapNotNull null,
-                        items = it.musicShelfRenderer.contents?.mapNotNull {
-                            SearchSummaryPage.fromMusicResponsiveListItemRenderer(it.musicResponsiveListItemRenderer)
-                        }?.ifEmpty { null } ?: return@mapNotNull null
+                        items = it.musicShelfRenderer.contents
+                            ?.mapNotNull {
+                                SearchSummaryPage.fromMusicResponsiveListItemRenderer(it.musicResponsiveListItemRenderer)
+                            }
+                            ?.distinctBy { it.id }
+                            ?.ifEmpty { null } ?: return@mapNotNull null
                     )
             }!!
         )
@@ -205,7 +210,7 @@ object YouTube {
             ?.gridRenderer
         if (gridRenderer != null) {
             ArtistItemsPage(
-                title = gridRenderer.header?.gridHeaderRenderer?.title?.runs?.firstOrNull()?.text!!,
+                title = gridRenderer.header?.gridHeaderRenderer?.title?.runs?.firstOrNull()?.text.orEmpty(),
                 items = gridRenderer.items.mapNotNull {
                     it.musicTwoRowItemRenderer?.let { renderer ->
                         ArtistItemsPage.fromMusicTwoRowItemRenderer(renderer)
@@ -485,8 +490,11 @@ object YouTube {
             .jsonPrimitive.content
     }
 
-    suspend fun accountInfo(): Result<AccountInfo?> = runCatching {
-        innerTube.accountMenu(WEB_REMIX).body<AccountMenuResponse>().actions[0].openPopupAction.popup.multiPageMenuRenderer.header?.activeAccountHeaderRenderer?.toAccountInfo()
+    suspend fun accountInfo(): Result<AccountInfo> = runCatching {
+        innerTube.accountMenu(WEB_REMIX).body<AccountMenuResponse>()
+            .actions[0].openPopupAction.popup.multiPageMenuRenderer
+            .header?.activeAccountHeaderRenderer
+            ?.toAccountInfo()!!
     }
 
     @JvmInline

@@ -230,7 +230,6 @@ fun ArtistScreen(
                                             SongMenu(
                                                 originalSong = song,
                                                 navController = navController,
-                                                playerConnection = playerConnection,
                                                 onDismiss = menuState::dismiss
                                             )
                                         }
@@ -284,7 +283,6 @@ fun ArtistScreen(
                                                 YouTubeSongMenu(
                                                     song = song,
                                                     navController = navController,
-                                                    playerConnection = playerConnection,
                                                     onDismiss = menuState::dismiss
                                                 )
                                             }
@@ -322,6 +320,7 @@ fun ArtistScreen(
                                             else -> false
                                         },
                                         isPlaying = isPlaying,
+                                        coroutineScope = coroutineScope,
                                         modifier = Modifier
                                             .combinedClickable(
                                                 onClick = {
@@ -338,26 +337,22 @@ fun ArtistScreen(
                                                             is SongItem -> YouTubeSongMenu(
                                                                 song = item,
                                                                 navController = navController,
-                                                                playerConnection = playerConnection,
                                                                 onDismiss = menuState::dismiss
                                                             )
 
                                                             is AlbumItem -> YouTubeAlbumMenu(
-                                                                album = item,
+                                                                albumItem = item,
                                                                 navController = navController,
-                                                                playerConnection = playerConnection,
                                                                 onDismiss = menuState::dismiss
                                                             )
 
                                                             is ArtistItem -> YouTubeArtistMenu(
                                                                 artist = item,
-                                                                playerConnection = playerConnection,
                                                                 onDismiss = menuState::dismiss
                                                             )
 
                                                             is PlaylistItem -> YouTubePlaylistMenu(
                                                                 playlist = item,
-                                                                playerConnection = playerConnection,
                                                                 coroutineScope = coroutineScope,
                                                                 onDismiss = menuState::dismiss
                                                             )
@@ -432,13 +427,9 @@ fun ArtistScreen(
             IconButton(
                 onClick = {
                     database.transaction {
-                        val artist = libraryArtist
+                        val artist = libraryArtist?.artist
                         if (artist != null) {
-                            update(
-                                artist.copy(
-                                    bookmarkedAt = if (artist.bookmarkedAt != null) null else LocalDateTime.now()
-                                )
-                            )
+                            update(artist.toggleLike())
                         } else {
                             artistPage?.artist?.let {
                                 insert(
@@ -455,8 +446,8 @@ fun ArtistScreen(
                 }
             ) {
                 Icon(
-                    painter = painterResource(if (libraryArtist?.bookmarkedAt != null) R.drawable.bookmark_filled else R.drawable.bookmark),
-                    tint = if (libraryArtist?.bookmarkedAt != null) MaterialTheme.colorScheme.primary else LocalContentColor.current,
+                    painter = painterResource(if (libraryArtist?.artist?.bookmarkedAt != null) R.drawable.favorite else R.drawable.favorite_border),
+                    tint = if (libraryArtist?.artist?.bookmarkedAt != null) MaterialTheme.colorScheme.error else LocalContentColor.current,
                     contentDescription = null
                 )
             }

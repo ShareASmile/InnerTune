@@ -1,6 +1,9 @@
 package com.zionhuang.music.ui.player
 
 import android.content.res.Configuration
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -21,7 +24,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBarDefaults
 import androidx.compose.material3.Slider
@@ -56,8 +60,10 @@ import androidx.media3.common.Player.STATE_READY
 import androidx.navigation.NavController
 import com.zionhuang.music.LocalPlayerConnection
 import com.zionhuang.music.R
+import com.zionhuang.music.constants.PlayerHorizontalPadding
 import com.zionhuang.music.constants.QueuePeekHeight
 import com.zionhuang.music.extensions.togglePlayPause
+import com.zionhuang.music.extensions.toggleRepeatMode
 import com.zionhuang.music.models.MediaMetadata
 import com.zionhuang.music.ui.component.BottomSheet
 import com.zionhuang.music.ui.component.BottomSheetState
@@ -125,13 +131,24 @@ fun BottomSheetPlayer(
         }
     ) {
         val controlsContent: @Composable ColumnScope.(MediaMetadata) -> Unit = { mediaMetadata ->
+            val playPauseRoundness by animateDpAsState(
+                targetValue = if (isPlaying) 24.dp else 36.dp,
+                animationSpec = tween(durationMillis = 100, easing = LinearEasing),
+                label = "playPauseRoundness"
+            )
+
             Text(
                 text = mediaMetadata.title,
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(horizontal = 16.dp)
+                modifier = Modifier
+                    .padding(horizontal = PlayerHorizontalPadding)
+                    .clickable(enabled = mediaMetadata.album != null) {
+                        navController.navigate("album/${mediaMetadata.album!!.id}")
+                        state.collapseSoft()
+                    }
             )
 
             Spacer(Modifier.height(6.dp))
@@ -140,7 +157,7 @@ fun BottomSheetPlayer(
                 horizontalArrangement = Arrangement.Center,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
+                    .padding(horizontal = PlayerHorizontalPadding)
             ) {
                 mediaMetadata.artists.fastForEachIndexed { index, artist ->
                     Text(
@@ -179,7 +196,7 @@ fun BottomSheetPlayer(
                     }
                     sliderPosition = null
                 },
-                modifier = Modifier.padding(horizontal = 16.dp)
+                modifier = Modifier.padding(horizontal = PlayerHorizontalPadding)
             )
 
             Row(
@@ -187,7 +204,7 @@ fun BottomSheetPlayer(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
+                    .padding(horizontal = PlayerHorizontalPadding + 4.dp)
             ) {
                 Text(
                     text = makeTimeString(sliderPosition ?: position),
@@ -210,12 +227,12 @@ fun BottomSheetPlayer(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
+                    .padding(horizontal = PlayerHorizontalPadding)
             ) {
                 Box(modifier = Modifier.weight(1f)) {
                     ResizableIconButton(
                         icon = if (currentSong?.song?.liked == true) R.drawable.favorite else R.drawable.favorite_border,
-                        color = MaterialTheme.colorScheme.error,
+                        color = if (currentSong?.song?.liked == true) MaterialTheme.colorScheme.error else LocalContentColor.current,
                         modifier = Modifier
                             .size(32.dp)
                             .padding(4.dp)
@@ -240,7 +257,7 @@ fun BottomSheetPlayer(
                 Box(
                     modifier = Modifier
                         .size(72.dp)
-                        .clip(CircleShape)
+                        .clip(RoundedCornerShape(playPauseRoundness))
                         .background(MaterialTheme.colorScheme.secondaryContainer)
                         .clickable {
                             if (playbackState == STATE_ENDED) {
@@ -286,7 +303,7 @@ fun BottomSheetPlayer(
                             .padding(4.dp)
                             .align(Alignment.Center)
                             .alpha(if (repeatMode == REPEAT_MODE_OFF) 0.5f else 1f),
-                        onClick = playerConnection::toggleRepeatMode
+                        onClick = playerConnection.player::toggleRepeatMode
                     )
                 }
             }

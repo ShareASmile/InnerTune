@@ -47,13 +47,11 @@ import com.zionhuang.music.LocalPlayerConnection
 import com.zionhuang.music.R
 import com.zionhuang.music.constants.MiniPlayerHeight
 import com.zionhuang.music.constants.ThumbnailCornerRadius
-import com.zionhuang.music.extensions.metadata
 import com.zionhuang.music.extensions.togglePlayPause
 import com.zionhuang.music.models.MediaMetadata
 import com.zionhuang.music.ui.utils.HorizontalPager
 import com.zionhuang.music.ui.utils.SnapLayoutInfoProvider
 import kotlinx.coroutines.flow.drop
-import kotlin.math.abs
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -69,6 +67,9 @@ fun MiniPlayer(
     val windows by playerConnection.queueWindows.collectAsState()
     val currentWindowIndex by playerConnection.currentWindowIndex.collectAsState()
 
+    val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
+    val canSkipNext by playerConnection.canSkipNext.collectAsState()
+
     val pagerState = rememberPagerState(
         initialPage = currentWindowIndex.takeIf { it != -1 } ?: 0
     )
@@ -83,11 +84,7 @@ fun MiniPlayer(
     LaunchedEffect(pagerState, currentWindowIndex) {
         if (windows.isNotEmpty()) {
             try {
-                if (abs(pagerState.currentPage - currentWindowIndex) <= 1) {
-                    pagerState.animateScrollToPage(currentWindowIndex)
-                } else {
-                    pagerState.scrollToPage(currentWindowIndex)
-                }
+                pagerState.animateScrollToPage(currentWindowIndex)
             } catch (_: Exception) {
             }
         }
@@ -128,7 +125,7 @@ fun MiniPlayer(
                 beyondBoundsPageCount = 2,
                 modifier = Modifier.weight(1f)
             ) { window ->
-                window.mediaItem.metadata?.let {
+                mediaMetadata?.let {
                     MiniMediaInfo(
                         mediaMetadata = it,
                         error = error,
@@ -152,6 +149,17 @@ fun MiniPlayer(
                     contentDescription = null
                 )
             }
+
+            IconButton(
+                enabled = canSkipNext,
+                onClick = playerConnection.player::seekToNext
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.skip_next),
+                    contentDescription = null
+                )
+            }
+
         }
     }
 }

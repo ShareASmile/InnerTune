@@ -1,5 +1,7 @@
 @file:Suppress("UnstableApiUsage")
 
+val isFullBuild: Boolean by rootProject.extra
+
 plugins {
     id("com.android.application")
     kotlin("android")
@@ -10,14 +12,14 @@ plugins {
 
 android {
     namespace = "com.zionhuang.music"
-    compileSdk = 33
+    compileSdk = 34
     buildToolsVersion = "30.0.3"
     defaultConfig {
         applicationId = "com.zionhuang.music"
         minSdk = 24
-        targetSdk = 33
-        versionCode = 16
-        versionName = "0.5.0"
+        targetSdk = 34
+        versionCode = 19
+        versionName = "0.5.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildTypes {
@@ -25,27 +27,29 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            resValue("string", "app_name", "InnerTune")
         }
         debug {
             applicationIdSuffix = ".debug"
-            resValue("string", "app_name", "InnerTune Debug")
+        }
+    }
+    flavorDimensions += "version"
+    productFlavors {
+        create("foss") {
+            dimension = "version"
         }
     }
     signingConfigs {
         getByName("debug") {
             if (System.getenv("MUSIC_DEBUG_SIGNING_STORE_PASSWORD") != null) {
-                val tmpFilePath = System.getProperty("user.home") + "/work/_temp/Key/"
-                val allFilesFromDir = File(tmpFilePath).listFiles()
-                val keystoreFile = allFilesFromDir?.first()
-                storeFile = keystoreFile ?: file(System.getenv("MUSIC_DEBUG_KEYSTORE_FILE"))
+                storeFile = file(System.getenv("MUSIC_DEBUG_KEYSTORE_FILE"))
                 storePassword = System.getenv("MUSIC_DEBUG_SIGNING_STORE_PASSWORD")
-                keyAlias = System.getenv("MUSIC_DEBUG_SIGNING_KEY_ALIAS")
+                keyAlias = "debug"
                 keyPassword = System.getenv("MUSIC_DEBUG_SIGNING_KEY_PASSWORD")
             }
         }
     }
     buildFeatures {
+        buildConfig = true
         compose = true
     }
     composeOptions {
@@ -63,10 +67,12 @@ android {
         freeCompilerArgs = freeCompilerArgs + "-Xcontext-receivers"
         jvmTarget = "11"
     }
-
     testOptions {
         unitTests.isIncludeAndroidResources = true
         unitTests.isReturnDefaultValues = true
+    }
+    lint {
+        disable += "MissingTranslation"
     }
 }
 
@@ -91,6 +97,7 @@ dependencies {
     implementation(libs.compose.ui.tooling)
     implementation(libs.compose.animation)
     implementation(libs.compose.animation.graphics)
+    implementation(libs.compose.reorderable)
 
     implementation(libs.viewmodel)
     implementation(libs.viewmodel.compose)
