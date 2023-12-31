@@ -18,12 +18,10 @@ jobs:
           cache: 'gradle'
 
       - name: Build debug APK and run jvm tests
-        run: ./gradlew assembleDebug lintFullDebug testFullDebugUnitTest --stacktrace -DskipFormatKtlint
-        env:
-          PULL_REQUEST: 'true'
+        run: ./gradlew assembleDebug lintFossDebug testFossDebugUnitTest --stacktrace -DskipFormatKtlint
 
       - name: Upload APK
         uses: actions/upload-artifact@v3
         with:
           name: app
-          path: app/build/outputs/apk/full/debug/*.apk
+          path: app/build/outputs/apk/foss/debug/*.apk
